@@ -107,11 +107,20 @@ class PreprintManager(models.Manager):
         # TODO: Remove need for .distinct using correct subqueries
         return ret.distinct('id', 'created') if include_non_public else ret
 
+class PublishedPreprintManager(PreprintManager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_published=True)
+
+class RejectedPreprintManager(PreprintManager):
+    def get_queryset(self):
+        return super().get_queryset().filter(actions__to_state='rejected')
 
 class Preprint(DirtyFieldsMixin, VersionedGuidMixin, IdentifierMixin, ReviewableMixin, BaseModel, TitleMixin, DescriptionMixin,
         Loggable, Taggable, ContributorMixin, GuardianMixin, SpamOverrideMixin, TaxonomizableMixin, AffiliatedInstitutionMixin):
 
     objects = PreprintManager()
+    published_objects = PublishedPreprintManager()
+    rejected_objects = RejectedPreprintManager()
     # Preprint fields that trigger a check to the spam filter on save
     SPAM_CHECK_FIELDS = {
         'title',
@@ -296,6 +305,12 @@ class Preprint(DirtyFieldsMixin, VersionedGuidMixin, IdentifierMixin, Reviewable
         guid_version.save()
 
         return preprint
+
+    # @classmethod
+    # def get_source_preprint(cls, guid):
+    #     base_guid_obj = Guid.load(guid)
+    #     if base_guid_obj.versions.count() == 1:
+    #         return base_guid_obj.referent
 
     @classmethod
     def create_version(cls, create_from_guid, auth):
@@ -1374,6 +1389,20 @@ class Preprint(DirtyFieldsMixin, VersionedGuidMixin, IdentifierMixin, Reviewable
             )
         if save:
             self.save()
+
+    # Override ReviewableMixin
+    def run_reject(self, user, comment):
+        """Run the 'reject' state transition and create a corresponding Action.
+
+        Params:
+            user: The user triggering this transition.
+            comment: Text describing why.
+        """
+        ret = super().run_reject(user=user, comment=comment)
+        versioned_guid = self.versioned_guids.first()
+        versioned_guid.is_rejected = True
+        versioned_guid.save()
+        return ret
 
 @receiver(post_save, sender=Preprint)
 def create_file_node(sender, instance, **kwargs):
