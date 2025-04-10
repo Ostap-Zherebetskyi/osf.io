@@ -18,6 +18,7 @@ from api_tests.share import _utils as shtrove_test_utils
 from framework.celery_tasks import app as celery_app
 from osf.external.spam import tasks as spam_tasks
 from website import settings as website_settings
+from osf.management.commands.manage_switch_flags import manage_waffle
 
 
 logger = logging.getLogger(__name__)
@@ -357,3 +358,10 @@ def with_class_scoped_db(_class_scoped_db):
     ```
     """
     yield from rolledback_transaction('function_transaction')
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_waffle(django_db_setup, django_db_blocker):
+    """Runs before tests start and allows database access."""
+    with django_db_blocker.unblock():
+        logger.info("Setting up Waffle Flags and Switches...")
+        manage_waffle(delete_waffle=True)
