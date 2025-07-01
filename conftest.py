@@ -22,6 +22,8 @@ from website import settings as website_settings
 def pytest_configure(config):
     if not os.getenv("GITHUB_ACTIONS") == "true":
         config.option.allow_hosts += ',mailhog'
+    else:
+        print('*' * 100)
 
 
 logger = logging.getLogger(__name__)
