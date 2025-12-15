@@ -277,7 +277,6 @@ class TestConfirmClaimUser:
             'David Davidson',
             'david@david.son',
             auth=Auth(referrer),
-            save=True
         )
 
     @pytest.fixture()
