@@ -52,7 +52,7 @@ class TestApprovePendingSchemaResponses:
         with capture_notifications():
             with mock.patch(
                 'osf.models.schema_response.SchemaResponse.is_moderated',
-                new_callaoble=mock.PropertyMock
+                new_callable=mock.PropertyMock
             ) as mock_is_moderated:
                 mock_is_moderated.return_value = is_moderated
                 count = approve_pending_schema_responses()
