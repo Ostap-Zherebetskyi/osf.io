@@ -484,6 +484,7 @@ def send_claim_email(
     """
     Unregistered user claiming a user account as a contributor to a project. Send an email for claiming the account.
     Either sends to the given email or the referrer's email, depending on the email address provided.
+    Send a claim email to an unregistered contributor or the referrer, depending on the scenario.
 
     Args:
         email (str): Email address provided for claim.

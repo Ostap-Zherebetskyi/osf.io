@@ -33,6 +33,8 @@ from osf.models import (
     DraftRegistrationContributor,
     UserSessionMap,
     NotificationType,
+    DraftRegistration,
+    DraftNode,
 )
 from osf.models.institution_affiliation import get_user_by_institution_identity
 from addons.github.tests.factories import GitHubAccountFactory

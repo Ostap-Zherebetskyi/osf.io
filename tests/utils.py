@@ -206,8 +206,8 @@ mock_auth = lambda user: mock.patch(
 
 def unique(factory):
     """
-    Turns a factory function into a new factory function that guarantees unique return
-    values. Note this uses regular item equivalence to check uniqueness, so this may not
+    Turn a factory function into one that guarantees unique return values.
+    Note this uses regular item equivalence to check uniqueness, so this may not
     behave as expected with factories with complex return values.
 
     Example use:
@@ -222,6 +222,8 @@ def unique(factory):
         while item in used:
             if over > 100:
                 raise RuntimeError('Tried 100 times to generate an unique value, stopping.')
+            if attempts > 100:
+                raise RuntimeError('Tried 100 times to generate a unique value, stopping.')
             item = factory()
             attempts += 1
         used.append(item)

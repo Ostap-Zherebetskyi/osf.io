@@ -76,6 +76,7 @@ class SubscriptionList(JSONAPIBaseView, generics.ListAPIView, ListFilterMixin):
             NotificationType.Type.ADDON_FILE_MOVED.value,
             NotificationType.Type.ADDON_FILE_REMOVED.value,
             NotificationType.Type.FOLDER_CREATED.value,
+            NotificationType.Type.FILE_UPDATED.value,
         ]
 
         qs = NotificationSubscription.objects.filter(
@@ -197,6 +198,7 @@ class SubscriptionDetail(JSONAPIBaseView, generics.RetrieveUpdateAPIView):
         return obj
 
     def update(self, request, *args, **kwargs):
+<<<<<<< HEAD
         """
         Update a notification subscription
         """
@@ -206,6 +208,7 @@ class SubscriptionDetail(JSONAPIBaseView, generics.RetrieveUpdateAPIView):
                 user=self.request.user,
                 notification_type__name__in=[
                     NotificationType.Type.USER_FILE_UPDATED.value,
+                    NotificationType.Type.FILE_UPDATED.value,
                     NotificationType.Type.FILE_ADDED.value,
                     NotificationType.Type.FILE_REMOVED.value,
                     NotificationType.Type.ADDON_FILE_COPIED.value,
@@ -253,6 +256,7 @@ class SubscriptionDetail(JSONAPIBaseView, generics.RetrieveUpdateAPIView):
                 object_id=node_id,
                 notification_type__name__in=[
                     NotificationType.Type.NODE_FILE_UPDATED.value,
+                    NotificationType.Type.FILE_UPDATED.value,
                     NotificationType.Type.FILE_ADDED.value,
                     NotificationType.Type.FILE_REMOVED.value,
                     NotificationType.Type.ADDON_FILE_COPIED.value,
@@ -273,6 +277,26 @@ class SubscriptionDetail(JSONAPIBaseView, generics.RetrieveUpdateAPIView):
 
         else:
             return super().update(request, *args, **kwargs)
+=======
+        ret = super().update(request, *args, **kwargs)
+        obj = self.get_object()
+        # Copy global_reviews subscription changes to new_pending_submissions subscriptions [ENG-9666]
+        if obj.event_name == 'global_reviews':
+            user = obj.user
+            qs = NotificationSubscription.objects.filter(
+                event_name='new_pending_submissions',
+            ).filter(
+                Q(none=user) |
+                Q(email_digest=user) |
+                Q(email_transactional=user),
+            ).distinct()
+            for subscription in qs:
+                data = {**request.data, 'id': subscription._id}
+                serializer = self.get_serializer(subscription, data=data)
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+        return ret
+>>>>>>> upstream/hotfix/25.18.1
 
 
 class AbstractProviderSubscriptionDetail(SubscriptionDetail):
