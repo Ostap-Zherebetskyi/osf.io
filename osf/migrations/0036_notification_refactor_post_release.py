@@ -17,6 +17,7 @@ def reverse(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    atomic = False
 
     dependencies = [
         ('contenttypes', '0002_remove_content_type_name'),
