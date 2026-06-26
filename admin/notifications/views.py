@@ -1,16 +1,19 @@
 from django.urls import reverse_lazy
 from django.db.models import Q
-from osf.models import NotificationSubscription, NotificationType, Notification, EmailTask
-from django.views.generic import ListView, DetailView, UpdateView
+from osf.models import NotificationSubscription, NotificationType, Notification, EmailTask, OSFUser
+from django.views.generic import ListView, DetailView, UpdateView, TemplateView
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.forms.models import model_to_dict
-from .forms import NotificationTypeForm
+from .forms import NotificationTypeForm, SendNotificationEmailForm
 from osf.email import _render_email_html
 import json
 from collections import defaultdict
 from mako.lexer import Lexer
 from mako.parsetree import ControlLine
 import re
+from osf.management.commands.send_email_notifications import send_email_notifications
+from django.contrib import messages
+from string import Formatter
 
 def delete_selected_notifications(selected_ids):
     NotificationSubscription.objects.filter(id__in=selected_ids).delete()
@@ -82,7 +85,7 @@ def generate_mock_json(structure, list_name=None):
     return result
 
 
-def build_safe_context(template: str) -> dict:
+def build_safe_context(template: str, subject: str) -> dict:
     templatenode = Lexer(text=template).parse()
     identifiers_location = []
     for node in templatenode.get_children():
@@ -103,6 +106,9 @@ def build_safe_context(template: str) -> dict:
     mock_json = generate_mock_json(identifier_structure)
     context = {identifier: f'mock_{identifier}' for identifier in flatten_identifiers if identifier not in TEMPLATE_IDENTIFIER_BLACKLIST}
     context.update(mock_json)
+
+    # subject
+    context.update({key: key for _, key, _, _ in Formatter().parse(subject) if key})
     return context
 
 class NotificationsList(PermissionRequiredMixin, ListView):
@@ -282,12 +288,12 @@ class NotificationTypePreview(PermissionRequiredMixin, DetailView):
                 return kwargs
         else:
             if notification_type.is_digest_type:
-                inner_context = build_safe_context(notification_type.template)
+                inner_context = build_safe_context(notification_type.template, notification_type.subject)
                 inner_template = _render_email_html(notification_type, ctx=inner_context, return_original_error=True)
                 safe_context = {'notifications': [inner_template]}
                 return_context = inner_context
             else:
-                safe_context = build_safe_context(notification_type.template)
+                safe_context = build_safe_context(notification_type.template, notification_type.subject)
                 return_context = safe_context
 
         if notification_type.is_digest_type:
@@ -327,3 +333,47 @@ class NotificationTypeChangeForm(PermissionRequiredMixin, UpdateView):
 
     def get_success_url(self, *args, **kwargs):
         return reverse_lazy('notifications:type_display', kwargs={'pk': self.kwargs.get('pk')})
+
+class SendNotificationEmail(PermissionRequiredMixin, TemplateView):
+    permission_required = 'osf.view_notificationtype'
+    template_name = 'notifications/send_notification_email.html'
+    raise_exception = True
+    user_filters = {
+        'Username': 'username',
+        'Username partial': 'username__contains',
+    }
+
+    def get_context_data(self, *args, **kwargs):
+        kwargs['form'] = SendNotificationEmailForm()
+        kwargs['user_filters'] = self.user_filters
+        notification_type = NotificationType.objects.get(name='blank')
+        kwargs['notification_id'] = notification_type.id
+        return_context = build_safe_context(notification_type.template, notification_type.subject)
+        kwargs['context'] = json.dumps(return_context, indent=4)
+        return kwargs
+
+    def post(self, request, *args, **kwargs):
+        filters = {}
+        for filter in self.user_filters.values():
+            if filter_value := request.POST.get(filter):
+                filters[filter] = filter_value
+        if filters:
+            users_qs = OSFUser.objects.filter(**filters)
+        else:
+            users_qs = OSFUser.objects.none()
+        context = self.get_context_data(**kwargs)
+        context['recipients'] = users_qs
+        context['form'] = SendNotificationEmailForm(request.POST)
+
+        if request.POST.get('action') == 'preview_receivers':
+            return self.render_to_response(context)
+        if request.POST.get('action') == 'send' and not request.POST.get('approve_recipients'):
+            messages.error(request, 'You must approve recipients list to do this action')
+            return self.render_to_response(context)
+        if not users_qs.exists():
+            messages.error(request, 'No recipients selected')
+            return self.render_to_response(context)
+
+        send_email_notifications(context=json.loads(request.POST.get('context')), recipients=users_qs)
+        messages.success(request, 'The email was sent successfully.')
+        return self.render_to_response(context)

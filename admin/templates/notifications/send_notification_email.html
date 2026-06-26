@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load static %}
+{% load render_bundle from webpack_loader %}
+{% block title %}
+    <title>Send Notification Email</title>
+{% endblock title %}
+{% block content %}
+    <h1>Send Notification Email</h1>
+    <div>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <fieldset>
+            <legend>Filters</legend>
+
+            {{ form.username.label_tag }}
+            {{ form.username }}
+
+            {{ form.username__contains.label_tag }}
+            {{ form.username__contains }}
+
+            <button
+                type="submit"
+                name="action"
+                value="preview_receivers">
+                Preview Recipients
+            </button>
+        </fieldset>
+
+        {% if recipients %}
+        <fieldset>
+            <legend>
+                <a role="button" data-toggle="collapse" href="#collapseRecipients" style="color: black;">
+                    <i class='fa fa-caret-down'></i> Recipients Preview</a>
+            </legend>
+
+            <p>
+                <strong>Total:</strong> {{ recipients|length }}
+            </p>
+            <div class="collapse" id="collapseRecipients">
+                <table>
+                    {% for recipient in recipients %}
+                    <tr>
+                        <td>{{ recipient.email }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </fieldset>
+        {% endif %}
+
+            {{ form.approve_recipients }}
+            {{ form.approve_recipients.label_tag }}
+
+        <textarea
+            id="mock-data"
+            name="context"
+            rows="20"
+            style="width: 100%; max-width: 70vw; font-family: monospace; white-space: pre;"
+        >{{ context }}</textarea>
+
+        <button
+            type="submit"
+            name="action"
+            value="send">
+            Send Email
+        </button>
+    </form>
+
+            </div>
+        </div>
+    </div>
+{% endblock %}

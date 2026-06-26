@@ -307,7 +307,7 @@
                       {% if perms.osf.view_emailtask %}
                         <li><a href="{% url 'notifications:email_tasks_list' %}"><i class='fa fa-link'></i> <span>Email Tasks</span></a></li>
                       {% endif %}
-
+                      <li><a href="{% url 'notifications:send_notification' %}"><i class='fa fa-link'></i> <span>Send notification email</span></a></li>
                   </ul>
               </div>
           {% endif %}

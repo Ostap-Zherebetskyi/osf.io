@@ -11,4 +11,5 @@ urlpatterns = [
     re_path(r'types_preview/(?P<pk>\d+)/$', views.NotificationTypePreview.as_view(), name='types_preview'),
     re_path(r'subscriptions/$', views.NotificationSubscriptionsList.as_view(), name='subscriptions_list'),
     re_path(r'email_tasks/$', views.EmailTasksList.as_view(), name='email_tasks_list'),
+    re_path(r'send_notification/$', views.SendNotificationEmail.as_view(), name='send_notification'),
 ]
