@@ -144,6 +144,8 @@ class NotificationTypeEnum(str, Enum):
 
     DRAFT_REGISTRATION_CONTRIBUTOR_ADDED_DEFAULT = 'draft_registration_contributor_added_default'
 
+    BLANK = 'blank'
+
     @ttl_cached_property(ttl=settings.TTL_CACHE_LIFETIME)
     def instance(self):
         obj, created = NotificationType.objects.get_or_create(name=self.value)

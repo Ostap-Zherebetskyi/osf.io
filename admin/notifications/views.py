@@ -374,6 +374,6 @@ class SendNotificationEmail(PermissionRequiredMixin, TemplateView):
             messages.error(request, 'No recipients selected')
             return self.render_to_response(context)
 
-        send_email_notifications(context=json.loads(request.POST.get('context')), recipients=users_qs)
+        send_email_notifications.delay(notification_type='blank', context=json.loads(request.POST.get('context')), *args, **kwargs)
         messages.success(request, 'The email was sent successfully.')
         return self.render_to_response(context)
