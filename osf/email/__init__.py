@@ -102,7 +102,7 @@ if not NOTIFY_BASE_URI:
 else:
     logging.info('Email templates: notify_base.mako resolved at URI %s (roots=%s)', NOTIFY_BASE_URI, LOOKUP_DIRS)
 
-def _inline_uri_for_db_template() -> str:
+def get_inline_uri_for_db_template() -> str:
     folder = 'emails'
     if NOTIFY_BASE_URI:
         parts = NOTIFY_BASE_URI.strip('/').split('/')
@@ -110,6 +110,7 @@ def _inline_uri_for_db_template() -> str:
             folder = '/'.join(parts[:-1])
     return f'/{folder}/inline_{os.getpid()}_{id(MAKO_LOOKUP)}.mako'
 
+inline_uri_for_db_template = get_inline_uri_for_db_template()
 
 INHERIT_RX = re.compile(
     r'(<%inherit\s+file=)(["\'])(?:/?(?:emails|notifications)/)?notify_base\.mako\2',
@@ -154,7 +155,7 @@ def _render_email_html(notification_type, ctx: dict, return_original_error: bool
     if not template_text:
         return ''
 
-    uri = _inline_uri_for_db_template()
+    uri = get_inline_uri_for_db_template()
     text = template_text
     if NOTIFY_BASE_URI:
         text = INHERIT_RX.sub(rf'\1\2{NOTIFY_BASE_URI}\2', text, count=1)

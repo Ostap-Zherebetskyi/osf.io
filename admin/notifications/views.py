@@ -1,4 +1,5 @@
 from django.urls import reverse_lazy
+from django.db import models
 from django.db.models import Q
 from osf.models import NotificationSubscription, NotificationType, Notification, EmailTask, OSFUser
 from django.views.generic import ListView, DetailView, UpdateView, TemplateView
@@ -21,6 +22,61 @@ def delete_selected_notifications(selected_ids):
 TEMPLATE_IDENTIFIER_BLACKLIST = {
     'if', 'else', 'and', 'or', 'not', 'in',
     'True', 'False', 'len', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple',
+}
+
+
+LOOKUPS = {
+    models.CharField: {
+        'exact': 'Equals',
+        'iexact': 'Equals (case insensitive)',
+        'contains': 'Contains',
+        'icontains': 'Contains (case insensitive)',
+        'startswith': 'Starts with',
+        'istartswith': 'Starts with (case insensitive)',
+        'endswith': 'Ends with',
+        'iendswith': 'Ends with (case insensitive)',
+        'in': 'In',
+        'isnull': 'Is empty',
+    },
+    models.TextField: {
+        'exact': 'Equals',
+        'iexact': 'Equals (case insensitive)',
+        'contains': 'Contains',
+        'icontains': 'Contains (case insensitive)',
+        'startswith': 'Starts with',
+        'istartswith': 'Starts with (case insensitive)',
+        'endswith': 'Ends with',
+        'iendswith': 'Ends with (case insensitive)',
+        'isnull': 'Is empty',
+    },
+    models.IntegerField: {
+        'exact': 'Equals',
+        'gt': 'Greater than',
+        'gte': 'Greater than or equal to',
+        'lt': 'Less than',
+        'lte': 'Less than or equal to',
+        'in': 'In',
+        'isnull': 'Is empty',
+    },
+    models.DateField: {
+        'exact': 'On',
+        'gt': 'After',
+        'gte': 'On or after',
+        'lt': 'Before',
+        'lte': 'On or before',
+        'isnull': 'Is empty',
+    },
+    models.DateTimeField: {
+        'exact': 'On',
+        'gt': 'After',
+        'gte': 'On or after',
+        'lt': 'Before',
+        'lte': 'On or before',
+        'isnull': 'Is empty',
+    },
+    models.BooleanField: {
+        'exact': 'Is',
+    },
 }
 
 def resolve_identifiers(identifier_structure):
@@ -338,14 +394,31 @@ class SendNotificationEmail(PermissionRequiredMixin, TemplateView):
     permission_required = 'osf.view_notificationtype'
     template_name = 'notifications/send_notification_email.html'
     raise_exception = True
-    user_filters = {
-        'Username': 'username',
-        'Username partial': 'username__contains',
-    }
+    allowed_filters = [
+        'is_active',
+        'is_staff',
+        'username',
+        'last_login',
+    ]
 
     def get_context_data(self, *args, **kwargs):
         kwargs['form'] = SendNotificationEmailForm()
-        kwargs['user_filters'] = self.user_filters
+
+        filter_fields = {}
+        for field in [f for f in OSFUser._meta.get_fields() if f.name in self.allowed_filters]:
+            if not field.concrete:
+                continue
+            if type(field) not in LOOKUPS.keys():
+                continue
+            filter_fields[field.name] = {
+                'label': field.verbose_name,
+                'type': field.get_internal_type().lower(),
+                'lookups': LOOKUPS.get(type(field), {})
+            }
+
+        kwargs['filter_fields'] = filter_fields
+        kwargs['filters'] = []
+        kwargs['predefined_filters'] = ['active', 'internal']
         notification_type = NotificationType.objects.get(name='blank')
         kwargs['notification_id'] = notification_type.id
         return_context = build_safe_context(notification_type.template, notification_type.subject)
@@ -353,15 +426,21 @@ class SendNotificationEmail(PermissionRequiredMixin, TemplateView):
         return kwargs
 
     def post(self, request, *args, **kwargs):
-        filters = {}
-        for filter in self.user_filters.values():
-            if filter_value := request.POST.get(filter):
-                filters[filter] = filter_value
-        if filters:
-            users_qs = OSFUser.objects.filter(**filters)
-        else:
-            users_qs = OSFUser.objects.none()
         context = self.get_context_data(**kwargs)
+        breakpoint()
+        filters = json.loads(request.POST['filters'])
+        if filters.get('mode') == 'manual':
+            orm_filters = {
+                f'{f["field"]}__{f["lookup"]}': f['value']
+                for f in filters.get('filters', [])
+            }
+            users_qs = OSFUser.objects.filter(**orm_filters)
+        else:
+            breakpoint()
+
+            pass
+        context['filters'] = filters
+
         context['recipients'] = users_qs
         context['form'] = SendNotificationEmailForm(request.POST)
 

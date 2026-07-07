@@ -1,8 +1,7 @@
-from django.apps import apps
 from django.db.models import Q
 from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce
-from osf.models import OSFUser, UserActivityCounter
+from osf.models import OSFUser, UserActivityCounter, NotificationTypeEnum, NotificationType
 from framework.celery_tasks import app as celery_app
 
 import logging
@@ -17,8 +16,13 @@ counter_subquery = (
     .values('total')[:1]
 )
 
+FILTER_PRESETS = {
+    'active': {'is_active': True},
+    'internal': {'is_active': True, 'is_staff': True, 'username__endswith': '@cos.io'},
+}
 
-def get_batches(filters={'is_active': True}, batch_size=100):
+
+def get_batches(filters={}, batch_size=100):
     qs = (
         OSFUser.objects
         .filter(**filters)
@@ -60,19 +64,22 @@ def get_batches(filters={'is_active': True}, batch_size=100):
 
 
 @celery_app.task(name='management.commands.send_email_notifications')
-def send_email_notifications(notification_type='blank', filters={'is_active': True}, context={}, *args, **kwargs):
-    # invalidate cache
-    for batch in get_batches(filters=filters, batch_size=5):
-        send_batch.delay(notification_type=notification_type, recipients_ids=batch, context=context, *args, **kwargs)
+def send_email_notifications(notification_type_name='blank', filters={'is_active': True}, context={}, *args, **kwargs):
+    if hasattr(NotificationTypeEnum, notification_type_name):
+        del getattr(NotificationTypeEnum, notification_type_name).instance
+
+    for batch in get_batches(filters=filters, batch_size=100):
+        send_batch.delay(notification_type_name=notification_type_name, recipients_ids=batch, context=context, *args, **kwargs)
 
 @celery_app.task(name='management.commands.send_batch')
 def send_batch(notification_type_name='blank', recipients_ids=[], context={}, *args, **kwargs):
-    NotificationType = apps.get_model('osf.NotificationType')
-    OSFUser = apps.get_model('osf.OSFUser')
-    notification_type_qs = NotificationType.objects.filter(name=notification_type_name)  # TODO: cache
-    if not notification_type_qs.exists():
-        return
-    notification_type = notification_type_qs.first()
+    if hasattr(NotificationTypeEnum, notification_type_name):
+        notification_type = getattr(NotificationTypeEnum, notification_type_name).instance
+    else:
+        notification_type_qs = NotificationType.objects.filter(name=notification_type_name)  # TODO: cache
+        if not notification_type_qs.exists():
+            return
+        notification_type = notification_type_qs.first()
     recipients_qs = OSFUser.objects.filter(id__in=recipients_ids)
     recipient_to_update = []
     for recipient in recipients_qs:
@@ -82,14 +89,14 @@ def send_batch(notification_type_name='blank', recipients_ids=[], context={}, *a
                 event_context=context,
                 save=False,  # Too many write operations
             )
-            recipient.notifications_configured.update({notification_type_name: timezone.now().strftime('%d-%m-%Y')})
+            recipient.notifications_configured.update({notification_type_name: timezone.now().strftime('%d-%m-%Y %H:%M:%S')})
             recipient_to_update.append(recipient)
         except Exception as exc:
             logger.error(exc)  # TODO update error
             pass
 
     OSFUser.objects.bulk_update(recipient_to_update, ['notifications_configured'])
-    logger.log()  # batch done
+    # logger.log()  # batch done
 
 
 class Command(BaseCommand):

@@ -151,6 +151,10 @@ class NotificationTypeEnum(str, Enum):
         obj, created = NotificationType.objects.get_or_create(name=self.value)
         return obj
 
+    @instance.deleter
+    def instance(self):
+        pass
+
 class NotificationType(models.Model):
 
     @property

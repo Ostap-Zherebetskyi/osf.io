@@ -5,6 +5,7 @@
     <title>Send Notification Email</title>
 {% endblock title %}
 {% block content %}
+<div>
     <h1>Send Notification Email</h1>
     <div>
         {% if messages %}
@@ -16,17 +17,38 @@
         {% endif %}
     </div>
 
-    <form method="post">
+    <form method="post" id="notification-form">
         {% csrf_token %}
 
         <fieldset>
             <legend>Filters</legend>
 
-            {{ form.username.label_tag }}
-            {{ form.username }}
+            {% csrf_token %}
 
-            {{ form.username__contains.label_tag }}
-            {{ form.username__contains }}
+            <label for="filter-mode">Filter type</label>
+
+            <select id="filter-mode" name="filter_mode">
+                <option value="manual">Manual</option>
+                <option value="predefined">Predefined</option>
+            </select>
+
+            <div id="manual-filters">
+                <div id="filter-builder"></div>
+
+                <button type="button" id="add-filter">
+                    + Add filter
+                </button>
+            </div>
+
+            <div id="predefined-filter" style="display:none">
+                <select id="filter-row" name="filter_row">
+                    {% for filter in predefined_filters %}
+                        <option value="{{ filter }}">{{ filter }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <input type="hidden" id="filters-input" name="filters">
 
             <button
                 type="submit"
@@ -34,6 +56,9 @@
                 value="preview_receivers">
                 Preview Recipients
             </button>
+
+            {{ filter_fields|json_script:"filter-fields" }}
+            {{ filters|json_script:"initial-filters" }}
         </fieldset>
 
         {% if recipients %}
@@ -76,7 +101,167 @@
         </button>
     </form>
 
-            </div>
-        </div>
-    </div>
+</div>
+{% endblock content %}
+
+{% block bottom_js %}
+    <script>
+
+    const filterMode = document.getElementById("filter-mode");
+    const manualFilters = document.getElementById("manual-filters");
+    const predefinedFilter = document.getElementById("predefined-filter");
+    const container = document.getElementById("filter-builder");
+    const form = document.getElementById("notification-form");
+
+    function updateMode() {
+        const manual = filterMode.value === "manual";
+
+        manualFilters.style.display = manual ? "" : "none";
+        predefinedFilter.style.display = manual ? "none" : "";
+    }
+
+    filterMode.addEventListener("change", updateMode);
+
+    updateMode();
+
+    const filterConfig = JSON.parse(
+        document.getElementById("filter-fields").textContent
+    );
+
+    const initialState = JSON.parse(
+        document.getElementById("initial-filters").textContent
+    );
+
+    if (initialState) {
+        filterMode.value = initialState.mode || "manual";
+        updateMode();
+
+        if (initialState.mode === "manual") {
+            (initialState.filters || []).forEach(addFilter);
+        }
+    }
+
+    const initialFilters = JSON.parse(
+        document.getElementById("initial-filters").textContent
+    );
+
+
+    document
+        .getElementById("add-filter")
+        .addEventListener("click", () => addFilter());
+
+    if (initialFilters.length) {
+        initialFilters.forEach(filter => addFilter(filter));
+    }
+
+    function addFilter(initial = null) {
+
+        const row = document.createElement("div");
+        row.classList.add("filter-row");
+
+        const field = document.createElement("select");
+        field.className = "field";
+
+        const operator = document.createElement("select");
+        operator.className = "operator";
+
+        const value = document.createElement("input");
+        value.className = "value";
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "✕";
+        remove.onclick = () => row.remove();
+
+        Object.entries(filterConfig).forEach(([name, config]) => {
+            field.add(new Option(config.label, name));
+        });
+
+        field.onchange = () => updateOperatorAndValue(field, operator, value);
+
+        operator.onchange = () => {
+            updateValueName(field, operator, value);
+        };
+
+        row.append(field, operator, value, remove);
+        container.appendChild(row);
+
+        if (initial) {
+            field.value = initial.field;
+        }
+
+        updateOperatorAndValue(field, operator, value);
+
+        if (initial) {
+            operator.value = initial.lookup;
+            updateValueName(field, operator, value);
+            value.value = initial.value;
+        }
+    }
+
+    function updateValueName(field, operator, value) {
+    }
+
+    function updateOperatorAndValue(field, operator, value) {
+        const config = filterConfig[field.value];
+
+        operator.innerHTML = "";
+
+        Object.entries(config.lookups).forEach(([lookup, label]) => {
+            operator.add(new Option(label, lookup));
+        });
+
+        updateValueName(field, operator, value);
+            switch (config.type) {
+                case "datetimefield":
+                    value.type = "datetime-local";
+                    break;
+
+                case "integerfield":
+                    value.type = "number";
+                    break;
+
+                case "booleanfield":
+                    value.outerHTML = `
+                        <select class="value"
+                                name="${field.value}__${operator.value}">
+                            <option value="True">True</option>
+                            <option value="False">False</option>
+                        </select>
+                    `;
+                    value = row.querySelector(".value");
+                    break;
+
+                default:
+                    value.type = "text";
+            }
+    }
+
+
+    form.addEventListener("submit", function () {
+        if (filterMode.value === "predefined") {
+            document.getElementById("filters-input").value = JSON.stringify({
+                mode: "predefined",
+                filter: document.getElementById("filter-row").value
+            });
+            return;
+        }
+
+        const filters = [];
+
+        document.querySelectorAll(".filter-row").forEach(row => {
+            filters.push({
+                field: row.querySelector(".field").value,
+                lookup: row.querySelector(".operator").value,
+                value: row.querySelector(".value").value
+            });
+        });
+
+        document.getElementById("filters-input").value = JSON.stringify({
+            mode: "manual",
+            filters: filters
+        });
+    });
+
+    </script>
 {% endblock %}
